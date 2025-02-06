@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+
+/**
+ * bin/www
+ * This file starts the Node server using the app from server.js
+ */
+
+const { PORT } = require("../config/config");
+const app = require("../server");
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});

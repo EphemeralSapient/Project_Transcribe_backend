@@ -1,0 +1,7 @@
+.env
+node_modules
+*.old
+idk.js
+.old
+uploads/
+bin/uploads

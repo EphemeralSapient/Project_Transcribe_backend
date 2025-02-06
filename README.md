@@ -33,34 +33,5 @@ chmod +x ./bin/www
 ./bin/www
 ```
 
-# File Structure
-.
-├── .env
-├── config/
-│   ├── config.js
-│   └── db.js
-├── controllers/
-│   ├── authController.js
-│   ├── doctorController.js
-│   ├── patientController.js
-│   └── uploadController.js
-├── models/
-│   ├── appointmentModel.js
-│   ├── doctorModel.js
-│   ├── patientModel.js
-│   └── userModel.js
-├── routes/
-│   ├── authRoutes.js
-│   ├── doctorRoutes.js
-│   ├── index.js
-│   ├── patientRoutes.js
-│   └── uploadRoutes.js
-├── server.js
-├── sql/
-│   └── ...
-└── utils/
-    ├── summarization.js
-    └── transcription.js
-
 Please check frontend README file for more insights.
 
