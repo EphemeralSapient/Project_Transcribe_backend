@@ -47,7 +47,7 @@ exports.updatePatientDetails = async (req, res) => {
 exports.getPatientHistory = async (req, res) => {
   try {
     const patientId = req.params.patient_id;
-    const query = `SELECT * FROM medical_history WHERE patient_id = $1;`;
+    const query = "SELECT * FROM medical_history WHERE patient_id = $1;";
     const result = await pool.query(query, [patientId]);
     return res.status(200).json(result.rows[0]);
   } catch (error) {

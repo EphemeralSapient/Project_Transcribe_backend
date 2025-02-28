@@ -20,7 +20,7 @@ exports.login = async (req, res) => {
     // if (!match) { ... }
     //
     // For demonstration, we'll just do the logic from your snippet:
-    if (password == user.password_hash) {
+    if (password === user.password_hash) {
       // Actually, this means the user provided the same as the hash, so let's do the check you had
       return res.status(401).json({ error: "Invalid username/password" });
     }

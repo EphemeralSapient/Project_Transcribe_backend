@@ -3,14 +3,16 @@ const pool = require("../config/db");
 
 async function getAppointmentSchedules(doctorId) {
   const query = `
-    SELECT a.appointment_id as id, a.appointment_time as time, a.patient_id as patientId, 
-           a.reason as reason, a.status as status, u.name as patientName
-    FROM appointments a
-    JOIN users u ON a.patient_id = u.user_id
-    WHERE a.doctor_id = $1
-      AND a.appointment_time > NOW()
-    ORDER BY a.appointment_time ASC
-  `;
+  SELECT a.appointment_id as id, a.appointment_time as time, a.patient_id as patientId, 
+         a.reason as reason, a.status as status, u.name as patientName
+  FROM appointments a
+  JOIN users u ON a.patient_id = u.user_id
+  WHERE a.doctor_id = $1
+    AND a.appointment_time >= NOW() 
+    AND DATE(a.appointment_time) = CURRENT_DATE
+    AND a.status = 'scheduled'
+  ORDER BY a.appointment_time ASC
+`;
   const result = await pool.query(query, [doctorId]);
   return result.rows;
 }
@@ -24,7 +26,7 @@ async function createAppointment(doctorId, patientId, time, reason) {
 }
 
 async function deleteAppointment(appointmentId, doctorId) {
-  const query = `DELETE FROM appointments WHERE appointment_id = $1 AND doctor_id = $2`;
+  const query = "DELETE FROM appointments WHERE appointment_id = $1 AND doctor_id = $2";
   await pool.query(query, [appointmentId, doctorId]);
 }
 
@@ -129,9 +131,167 @@ async function getAppointmentHistory(doctorId, limit, offset) {
   return result.rows;
 }
 
+async function saveDiagnosis(appointmentId, patientId, doctorId, diagnosisData) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Check if the appointment exists and belongs to the specified doctor and patient
+    const appointmentCheck = await client.query(
+      `SELECT * FROM appointments 
+       WHERE appointment_id = $1 
+       AND doctor_id = $2 
+       AND patient_id = $3`,
+      [appointmentId, doctorId, patientId]
+    );
+    
+    if (appointmentCheck.rows.length === 0) {
+      throw new Error('Appointment not found or not authorized');
+    }
+    
+    // Format the data as user-friendly strings
+    const formatAsString = (data) => {
+      if (!data) return '';
+      if (typeof data === 'string') return data;
+      
+      if (Array.isArray(data)) {
+        // Special handling for medications array
+        if (data.length > 0 && data[0].medication) {
+          return data.map(med => 
+            `${med.medication} ${med.dosage || ''} ${med.frequency || ''} ${med.duration || ''}`.trim()
+          ).join('; ');
+        }
+        // Default array handling
+        return data.join(', ');
+      }
+      
+      return String(data);
+    };
+    
+    // Special format for medications to create a user-friendly string
+    const formatMedications = (meds) => {
+      if (!meds) return '';
+      if (typeof meds === 'string') return meds;
+      
+      if (Array.isArray(meds)) {
+        return meds.map(med => {
+          if (typeof med === 'object') {
+            const parts = [];
+            if (med.medication) parts.push(med.medication);
+            if (med.dosage) parts.push(med.dosage);
+            if (med.frequency) parts.push(`${med.frequency}`);
+            if (med.duration) parts.push(`for ${med.duration}`);
+            return parts.join(' - ');
+          }
+          return String(med);
+        }).join('; ');
+      }
+      
+      return String(meds);
+    };
+    
+    // Process diagnosis data into strings
+    const diagnosisNotes = diagnosisData.notes || diagnosisData.diagnosis || '';
+    const symptoms = formatAsString(diagnosisData.symptoms);
+    const medications = formatMedications(diagnosisData.medications || diagnosisData.medications_prescribed);
+    const tests = formatAsString(diagnosisData.tests || diagnosisData.tests_ordered);
+    const followUp = diagnosisData.followUp || diagnosisData.follow_up_instructions || '';
+    const allergies = formatAsString(diagnosisData.allergies);
+    const familyHistory = formatAsString(diagnosisData.familyHistory || diagnosisData.family_history);
+    const lifestyle = diagnosisData.lifestyle || diagnosisData.lifestyle_recommendations || '';
+    
+    // Check if a transcription summary already exists for this appointment
+    const summaryCheck = await client.query(
+      "SELECT * FROM transcription_summaries WHERE appointment_id = $1",
+      [appointmentId]
+    );
+    
+    let summaryId;
+    
+    if (summaryCheck.rows.length > 0) {
+      // Update existing summary
+      summaryId = summaryCheck.rows[0].summary_id;
+      await client.query(
+        `UPDATE transcription_summaries 
+         SET diagnosis = $1, 
+             symptoms = $2, 
+             medications_prescribed = $3,
+             follow_up_instructions = $4,
+             updated_at = NOW() 
+         WHERE summary_id = $5`,
+        [
+          diagnosisNotes,
+          symptoms,
+          medications,
+          followUp,
+          summaryId
+        ]
+      );
+    } else {
+      // Insert new summary
+      const summaryResult = await client.query(
+        `INSERT INTO transcription_summaries 
+         (appointment_id, diagnosis, symptoms, medications_prescribed, tests_ordered, 
+          follow_up_instructions, allergies, family_history, lifestyle_recommendations, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+         RETURNING summary_id`,
+        [
+          appointmentId,
+          diagnosisNotes,
+          symptoms,
+          medications,
+          tests,
+          followUp,
+          allergies,
+          familyHistory,
+          lifestyle
+        ]
+      );
+      
+      summaryId = summaryResult.rows[0].summary_id;
+    }
+    
+    // If medical analysis data is provided, add it
+    if (diagnosisData.medicalAnalysis && Array.isArray(diagnosisData.medicalAnalysis)) {
+      for (const analysis of diagnosisData.medicalAnalysis) {
+        await client.query(
+          `INSERT INTO medical_analysis 
+           (summary_id, test_type, test_date, results, remarks) 
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            summaryId,
+            analysis.testType || analysis.test_type || '',
+            analysis.testDate || analysis.test_date || new Date(),
+            analysis.results || '',
+            analysis.remarks || ''
+          ]
+        );
+      }
+    }
+    
+    // Update appointment status to completed
+    await client.query(
+      `UPDATE appointments SET status = 'completed' WHERE appointment_id = $1`,
+      [appointmentId]
+    );
+    
+    await client.query('COMMIT');
+    return { success: true };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error("Error in saveDiagnosis:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   getAppointmentSchedules,
   createAppointment,
   deleteAppointment,
   getAppointmentHistory,
+  saveDiagnosis
 };
+
+

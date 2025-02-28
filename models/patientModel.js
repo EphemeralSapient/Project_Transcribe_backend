@@ -2,7 +2,7 @@
 const pool = require("../config/db");
 
 async function getPatientDetails(userId) {
-  const query = `SELECT * FROM patients WHERE user_id = $1`;
+  const query = "SELECT * FROM patients WHERE user_id = $1";
   const result = await pool.query(query, [userId]);
   return result.rows[0] || null;
 }

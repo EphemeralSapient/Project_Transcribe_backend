@@ -8,6 +8,8 @@ const {
   createAppointment,
   deleteAppointment,
   getAppointmentHistory,
+  getSummarize,
+  saveDiagnosis
 } = require("../controllers/doctorController");
 const { authenticateToken } = require("../middleware/authMiddleware");
 const { authorizeRole } = require("../middleware/roleMiddleware");
@@ -30,5 +32,11 @@ router.delete(
 
 // /doctor/appointment-history
 router.get("/appointment-history", authenticateToken, authorizeRole("doctor"), getAppointmentHistory);
+
+// /doctor/summarize
+router.post("/summarize", authenticateToken, authorizeRole("doctor"), getSummarize);
+
+// /doctor/save-diagnosis
+router.post("/save-diagnosis", authenticateToken, authorizeRole("doctor"), saveDiagnosis);
 
 module.exports = router;

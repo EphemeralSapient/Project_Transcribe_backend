@@ -1,10 +1,9 @@
 // controllers/uploadController.js
-const fs = require("fs");
+const fs = require("node:fs");
 const { automaticSpeechRecognition } = require("../utils/transcription");
-const { unlinkSync } = require("fs");
+const { unlinkSync } = require("node:fs");
 
 // For /upload, accessed by doctor
-// TODO : Think well and come up with rate limit for who can access this endpoint
 exports.uploadFileAndTranscribe = async (req, res) => {
   try {
     if (!req.file) {
@@ -15,7 +14,7 @@ exports.uploadFileAndTranscribe = async (req, res) => {
     console.log("Transcription =>", text);
 
     // Clean up the file from disk
-    unlinkSync(req.file.path);
+    // unlinkSync(req.file.path);
 
     return res.status(200).json({
       message: "File uploaded and processed by Hugging Face",
